@@ -25,7 +25,7 @@ class MyStrategy:
         result = Action({}) # Action: new actions for entities. Map<int32, EntityAction>. If entity does not get a new action, it continues to do previously set action
 
         my_id = player_view.my_id
-
+        print(player_view.players[my_id-1].resource)
         # Decremement making_house
         if self.making_house != 0:
             self.making_house -= 1
@@ -111,7 +111,7 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
 
-                        if ((self.making_house == 0) and (self.current_population > (self.max_population-7))):
+                        if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                     
                             print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
@@ -168,7 +168,7 @@ class MyStrategy:
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
                         
                         result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-                        self.busy[entity.id] = 20
+                        self.busy[entity.id] = 40
                     
                     else:
                         self.busy[entity.id] -= 1
@@ -176,7 +176,7 @@ class MyStrategy:
                 # MELEE and RANGED BASE: Build a unit every 5 ticks
                 elif (entity.entity_type == EntityType.RANGED_BASE):
                     # Do every 5 ticks
-                    if (player_view.current_tick % 20 and player_view.players[my_id].resource > 30):
+                    if (player_view.current_tick % 20 and player_view.players[my_id-1].resource > 30):
                         # Check if we can make a unit
                         if ((self.current_population + 1 <= self.max_population)):
                             # Tell the base to make a unit
@@ -185,7 +185,7 @@ class MyStrategy:
 
                 elif (entity.entity_type == EntityType.MELEE_BASE):
                     # Do every 5 ticks
-                    if (player_view.current_tick % 20 and player_view.players[my_id].resource > 20):
+                    if (player_view.current_tick % 20 and player_view.players[my_id-1].resource > 20):
                         # Check if we can make a unit
                         if ((self.current_population + 1 <= self.max_population)):
                             # Tell the base to make a unit
@@ -195,7 +195,7 @@ class MyStrategy:
             return result
 
         
-        # MID GAME: Focus on building up army
+        # MID GAME: Focus on building up army. 
         if (self.builder_count > 12):
 
             # Loop through the entities
@@ -222,7 +222,7 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
 
-                        if ((self.making_house == 0) and (self.current_population > (self.max_population-7))):
+                        if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                     
                             print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
@@ -255,7 +255,7 @@ class MyStrategy:
                 elif entity.entity_type == EntityType.BUILDER_BASE:
                     if (player_view.current_tick % 10 == 0):
                         # Check if we can make a builder
-                        if ((self.current_population + 1 <= self.max_population) and player_view.players[my_id].resource > 10):
+                        if ((self.current_population + 1 <= self.max_population) and player_view.players[my_id-1].resource > 10):
                             
                             # Tell the builderbase to make a builder
                             build_action = BuildAction(EntityType.BUILDER_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
@@ -278,7 +278,7 @@ class MyStrategy:
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
                         
                         result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-                        self.busy[entity.id] = 20
+                        self.busy[entity.id] = 40
                     
                     else:
                         self.busy[entity.id] -= 1
@@ -287,7 +287,7 @@ class MyStrategy:
                 elif (entity.entity_type == EntityType.RANGED_BASE):
 
                     # Do every 5 ticks
-                    if (player_view.current_tick % 5 and player_view.players[my_id].resource > 30):
+                    if (player_view.current_tick % 5 and player_view.players[my_id-1].resource > 30):
                         # Check if we can make a unit
                         if ((self.current_population + 1 <= self.max_population)):
                             # Tell the base to make a unit
@@ -297,7 +297,7 @@ class MyStrategy:
                 elif (entity.entity_type == EntityType.MELEE_BASE):
 
                     # Do every 5 ticks
-                    if (player_view.current_tick % 5 and player_view.players[my_id].resource > 20):
+                    if (player_view.current_tick % 5 and player_view.players[my_id-1].resource > 20):
                         # Check if we can make a unit
                         if ((self.current_population + 1 <= self.max_population)):
                             # Tell the base to make a unit
@@ -305,6 +305,7 @@ class MyStrategy:
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)            
 
             return result
+
 
 
 
