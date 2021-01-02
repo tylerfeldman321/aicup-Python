@@ -21,6 +21,11 @@ class MyStrategy:
         self.game_stage = 0
         self.players_alive = [1,1,1] # 60,60 and larger area, <20,>60 area, >60,<20 area
     
+    # TODO:
+    # House building: try having making_house count the number of units trying to make one each round, and say that only 5 can attempt each turn
+    # Before making house, check for entities that would be in the way
+
+
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
     def get_action(self, player_view, debug_interface):
 
@@ -45,7 +50,7 @@ class MyStrategy:
                 elif (entity.entity_type == EntityType.TURRET and entity.player_id == my_id):
                     self.my_base_position = entity.position
 
-                if (entity.player_id == player_view.my_id and self._is_building(entity, player_view, debug_interface)):
+                if (entity.player_id == player_view.my_id and self._is_building(entity, player_view)):
                     self.repairing[entity.id] = 0
                 
 
@@ -74,19 +79,11 @@ class MyStrategy:
                         self.players_alive[2] = 1
                 continue
 
-            if (self.game_stage < 2):
-                if (entity.entity_type != EntityType.MELEE_UNIT and entity.entity_type != EntityType.RANGED_UNIT):
-                    if entity.position.x > self.my_territory_border_x:
-                        self.my_territory_border_x = entity.position.x
-                    if entity.position.y > self.my_territory_border_y:
-                        self.my_territory_border_y = entity.position.y
-            elif (self.game_stage >= 2):
+            if (entity.entity_type != EntityType.MELEE_UNIT and entity.entity_type != EntityType.RANGED_UNIT):
                 if entity.position.x > self.my_territory_border_x:
                     self.my_territory_border_x = entity.position.x
                 if entity.position.y > self.my_territory_border_y:
                     self.my_territory_border_y = entity.position.y
-
-
 
             if entity.entity_type == EntityType.BUILDER_UNIT:
                 self.builder_count += 1
@@ -100,7 +97,6 @@ class MyStrategy:
             if player_view.entity_properties[entity.entity_type].population_provide:
                 self.max_population = self.max_population + player_view.entity_properties[entity.entity_type].population_provide
 
-
         # Set the game stage: EARLY, MID, LATE
         if (self.builder_count <=12):
             self.game_stage = 0
@@ -109,9 +105,12 @@ class MyStrategy:
         elif (self.builder_count > 12 and self.unit_count >= 60):
             self.game_stage = 2
 
+
+
+
+
         # EARLY GAME: Make builders
         if (self.game_stage == 0):
-        #if True:
 
             # Loop through the entities
             for entity in player_view.entities:
@@ -135,7 +134,7 @@ class MyStrategy:
                     if self.busy[entity.id] == 0:
 
                         # Check if there are any buildings that are not at max health and are not being repaired already
-                        buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
+                        buildings_to_repair = self._buildings_to_repair(player_view)
 
                         if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                         #if ((self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
@@ -164,18 +163,6 @@ class MyStrategy:
 
                     else:
                         self.busy[entity.id] -= 1
-
-
-                # BUILDER BASE: Make a unit every possible chance
-                elif entity.entity_type == EntityType.BUILDER_BASE:
-
-                    # Check if we can make a builder
-                    if ((self.current_population + 1 <= self.max_population)):
-                        
-                        # Tell the builderbase to make a builder
-                        build_action = BuildAction(EntityType.BUILDER_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                        result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-
 
                 # ATTACKING UNITS: Move to edge of base and patrol
                 elif (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT):
@@ -187,36 +174,28 @@ class MyStrategy:
                         attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
 
                         
-                        nearby_enemies = self._enemies_near_initial_base(player_view, debug_interface)
+                        nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
                             print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
                         
                         result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-                        self.busy[entity.id] = 40
+                        self.busy[entity.id] = 60
                     
                     else:
                         self.busy[entity.id] -= 1
 
-                # MELEE and RANGED BASE: Build a unit every 5 ticks
+                # BUILDER BASE: Make a unit every possible chance
+                elif entity.entity_type == EntityType.BUILDER_BASE:
+                    self._build_unit(player_view, result, entity, EntityType.BUILDER_UNIT)
+
+                # MELEE and RANGED BASE: Make a unit every 30 ticks
                 elif (entity.entity_type == EntityType.RANGED_BASE):
-                    # Do every 10 ticks
-                    if (player_view.current_tick % 10 and player_view.players[my_id-1].resource > 30):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.RANGED_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                    self._build_unit(player_view, result, entity, EntityType.RANGED_UNIT, 30)
 
                 elif (entity.entity_type == EntityType.MELEE_BASE):
-                    # Do every 10 ticks
-                    if (player_view.current_tick % 10 and player_view.players[my_id-1].resource > 20):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.MELEE_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)     
+                    self._build_unit(player_view, result, entity, EntityType.MELEE_UNIT, 30)    
             
                 # TURRETS: attack nearby enemies
                 elif (entity.entity_type == EntityType.TURRET):
@@ -227,7 +206,7 @@ class MyStrategy:
 
         
         # MID GAME: Focus on building up army. 
-        if (self.game_stage == 1):
+        elif (self.game_stage == 1):
 
             # Loop through the entities
             for entity in player_view.entities:
@@ -251,7 +230,7 @@ class MyStrategy:
                     if self.busy[entity.id] == 0:
 
                         # Check if there are any buildings that are not at max health and are not being repaired already
-                        buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
+                        buildings_to_repair = self._buildings_to_repair(player_view)
 
                         if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                         #if ((self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
@@ -281,18 +260,6 @@ class MyStrategy:
                     else:
                         self.busy[entity.id] -= 1
 
-
-                # BUILDER BASE: Make a unit every 10 ticks
-                elif entity.entity_type == EntityType.BUILDER_BASE:
-                    if (player_view.current_tick % 10 == 0):
-                        # Check if we can make a builder
-                        if ((self.current_population + 1 <= self.max_population) and player_view.players[my_id-1].resource > 10):
-                            
-                            # Tell the builderbase to make a builder
-                            build_action = BuildAction(EntityType.BUILDER_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-
-
                 # ATTACKING UNITS: Move to edge of base and patrol
                 elif (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT):
                     
@@ -300,9 +267,8 @@ class MyStrategy:
                         move_position = random.choice([Vec2Int(self.my_territory_border_x+2, self.my_territory_border_y+2), Vec2Int(self.my_territory_border_x//2, self.my_territory_border_y+2), Vec2Int(self.my_territory_border_x+2, self.my_territory_border_y//2)])
                         move_action = MoveAction(move_position, True, False)
                         attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
-
                         
-                        nearby_enemies = self._enemies_nearby(player_view, debug_interface)
+                        nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
                             print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
@@ -314,26 +280,16 @@ class MyStrategy:
                     else:
                         self.busy[entity.id] -= 1
 
-                # MELEE and RANGED BASE: Build a unit every 5 ticks
-                elif (entity.entity_type == EntityType.RANGED_BASE):
+                # BUILDER BASE: Make a unit every 10 ticks
+                elif entity.entity_type == EntityType.BUILDER_BASE:
+                    self._build_unit(player_view, result, entity, EntityType.BUILDER_UNIT, 10)
 
-                    # Do every 5 ticks
-                    if (player_view.current_tick % 5 and player_view.players[my_id-1].resource > 30):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.RANGED_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                # MELEE and RANGED BASES: Make units every 5 ticks
+                elif (entity.entity_type == EntityType.RANGED_BASE):
+                    self._build_unit(player_view, result, entity, EntityType.RANGED_UNIT, 5)
 
                 elif (entity.entity_type == EntityType.MELEE_BASE):
-
-                    # Do every 5 ticks
-                    if (player_view.current_tick % 5 and player_view.players[my_id-1].resource > 20):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.MELEE_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)            
+                    self._build_unit(player_view, result, entity, EntityType.MELEE_UNIT, 5)        
 
                 # TURRETS: attack nearby enemies
                 elif (entity.entity_type == EntityType.TURRET):
@@ -345,7 +301,7 @@ class MyStrategy:
 
         # LATE GAME: attac
         elif (self.game_stage == 2):
-            print('players alive:', self.players_alive)
+
             # Loop through the entities
             for entity in player_view.entities:
 
@@ -368,7 +324,7 @@ class MyStrategy:
                     if self.busy[entity.id] == 0:
 
                         # Check if there are any buildings that are not at max health and are not being repaired already
-                        buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
+                        buildings_to_repair = self._buildings_to_repair(player_view)
 
                         if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                         #if ((self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
@@ -404,19 +360,7 @@ class MyStrategy:
                     else:
                         self.busy[entity.id] -= 1
 
-
-                # BUILDER BASE: Make a unit every 10 ticks
-                elif entity.entity_type == EntityType.BUILDER_BASE:
-                    if (player_view.current_tick % 10 == 0):
-                        # Check if we can make a builder
-                        if ((self.current_population + 1 <= self.max_population) and player_view.players[my_id-1].resource > 10):
-                            
-                            # Tell the builderbase to make a builder
-                            build_action = BuildAction(EntityType.BUILDER_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-
-
-                # ATTACKING UNITS: attack remaining enemies
+                # ATTACKING UNITS: Attack remaining enemies
                 elif (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT):
                     
                     if self.busy[entity.id] == 0:
@@ -433,38 +377,28 @@ class MyStrategy:
                         move_action = MoveAction(move_position, True, False)
                         attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
                         
-                        nearby_enemies = self._enemies_nearby(player_view, debug_interface)
+                        nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
                             print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
                         
                         result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
-                        self.busy[entity.id] = 100
+                        self.busy[entity.id] = 80
                     
                     else:
                         self.busy[entity.id] -= 1
 
+                # BUILDER BASE: Make a unit every 10 ticks
+                elif entity.entity_type == EntityType.BUILDER_BASE:
+                    self._build_unit(player_view, result, entity, EntityType.BUILDER_UNIT, 10)
+
                 # MELEE and RANGED BASE: Build a unit every 5 ticks
                 elif (entity.entity_type == EntityType.RANGED_BASE):
-
-                    # Do every 2 ticks
-                    if (player_view.current_tick % 2 and player_view.players[my_id-1].resource > 30):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.RANGED_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                    self._build_unit(player_view, result, entity, EntityType.RANGED_UNIT, 2)
 
                 elif (entity.entity_type == EntityType.MELEE_BASE):
-
-                    # Do every 2 ticks
-                    if (player_view.current_tick % 2 and player_view.players[my_id-1].resource > 20):
-                        # Check if we can make a unit
-                        if ((self.current_population + 1 <= self.max_population)):
-                            # Tell the base to make a unit
-                            build_action = BuildAction(EntityType.MELEE_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)  
+                    self._build_unit(player_view, result, entity, EntityType.MELEE_UNIT, 2)
 
                 # TURRETS: attack nearby enemies
                 elif (entity.entity_type == EntityType.TURRET):
@@ -473,9 +407,19 @@ class MyStrategy:
 
             return result
 
-        return result
 
-    def _enemies_near_initial_base(self, player_view, debug_interface):
+    def _build_unit(self, player_view, result, base, unit_type, freq=None):
+        cost_to_build = player_view.entity_properties[unit_type].initial_cost
+        move_action, build_action, attack_action, repair_action = None, None, None, None
+        properties = player_view.entity_properties[base.entity_type]
+        tick = player_view.current_tick
+        if not freq: # If no freq given, make a unit at every possible chance
+            tick, freq = 1, 1
+        if (tick % freq == 0 and player_view.players[player_view.my_id-1].resource > cost_to_build and self.current_population + 1 <= self.max_population):
+            build_action = BuildAction(unit_type, Vec2Int(base.position.x + properties.size, base.position.y + properties.size - 1))
+            result.entity_actions[base.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+    def _enemies_near_initial_base(self, player_view):
 
         enemies = []
         for entity in player_view.entities:
@@ -490,7 +434,7 @@ class MyStrategy:
 
         return enemies
 
-    def _enemies_nearby(self, player_view, debug_interface):
+    def _enemies_nearby(self, player_view):
 
         enemies = []
         for entity in player_view.entities:
@@ -511,7 +455,7 @@ class MyStrategy:
                 return building
         return None
 
-    def _buildings_to_repair(self, player_view, debug_interface):
+    def _buildings_to_repair(self, player_view):
 
         buildings_to_repair = []
         for entity in player_view.entities:
@@ -524,8 +468,7 @@ class MyStrategy:
             if entity.id not in self.repairing.keys():
                 self.repairing[entity.id] = 0
 
-            #if (self._is_building(entity, player_view, debug_interface) and entity.health == player_view.entity_properties[entity.entity_type].max_health):
-            if (self._is_building(entity, player_view, debug_interface) and entity.health == player_view.entity_properties[entity.entity_type].max_health):
+            if (self._is_building(entity, player_view) and entity.health == player_view.entity_properties[entity.entity_type].max_health):
                 self.repairing[entity.id] = 0
 
             elif (entity.health != player_view.entity_properties[entity.entity_type].max_health):
@@ -534,7 +477,7 @@ class MyStrategy:
 
         return buildings_to_repair
 
-    def _is_building(self, entity, player_view, debug_interface):
+    def _is_building(self, entity, player_view):
         if (entity.entity_type == EntityType.MELEE_BASE or entity.entity_type == EntityType.RANGED_BASE or entity.entity_type == EntityType.WALL or entity.entity_type == EntityType.BUILDER_BASE or entity.entity_type == EntityType.TURRET or entity.entity_type == EntityType.HOUSE):
             return True
         else:
