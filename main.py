@@ -1,7 +1,6 @@
 import model
 from stream_wrapper import StreamWrapper
 from my_strategy import MyStrategy
-from my_strategy_1 import MyStrategy1
 from debug_interface import DebugInterface
 import socket
 import sys
@@ -20,7 +19,7 @@ class Runner:
         self.writer.flush()
 
     def run(self):
-        strategy = MyStrategy1()
+        strategy = MyStrategy()
         debug_interface = DebugInterface(self.reader, self.writer)
 
         while True:

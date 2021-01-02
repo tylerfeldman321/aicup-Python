@@ -1,71 +1,291 @@
 from model import *
+import random
 
 
 class MyStrategy:
 
+    def __init__(self):
+        self.builder_count = 1
+        self.unit_count = 3
+        self.current_population = 3
+        self.max_population = 15
+        self.enemy_base_positions = []
+        self.my_base_position = None
+        self.map_center = None
+        self.busy = {}
+        self.repairing = {}
+        self.entity_positions = {}
+        self.making_house = 0
+        self.my_territory_border_x = 0
+        self.my_territory_border_y = 0
+    
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
     def get_action(self, player_view, debug_interface):
-
-        print(player_view.current_tick)
 
         result = Action({}) # Action: new actions for entities. Map<int32, EntityAction>. If entity does not get a new action, it continues to do previously set action
 
         my_id = player_view.my_id # Gets my player id
+        if self.making_house != 0:
+            self.making_house -= 1
 
-        # Loops through the entities in view
+        # Get positions of the initial buildings (so we know where not to build / where to build the houses)
+        # Get positions of the other three bases
+        if player_view.current_tick == 0:
+
+            for entity in player_view.entities:
+
+                self.busy[entity.id] = 0
+
+                if (entity.entity_type == EntityType.TURRET and entity.player_id != my_id):
+                    self.enemy_base_positions.append(entity.position)
+
+                elif (entity.entity_type == EntityType.TURRET and entity.player_id == my_id):
+                    self.my_base_position = entity.position
+
+                if (entity.player_id == player_view.my_id and self._is_building(entity, player_view, debug_interface)):
+                    self.repairing[entity.id] = 0
+                
+
+            self.map_center = Vec2Int(player_view.map_size / 2, player_view.map_size / 2)
+
+            print(self.map_center)
+            print(self.enemy_base_positions)
+            print(self.my_base_position)
+
+        # Get current info on unit counts and positions
+        self.builder_count = 0
+        self.current_population = 0
+        self.max_population = 0
         for entity in player_view.entities:
+            self.entity_positions[entity.id] = Vec2Int(entity.position.x, entity.position.y)
 
-            # Ignore entities that are not owned by me
+            if (entity.player_id == my_id):
+                #print(entity.position.x, entity.position.y)
+                if entity.position.x > self.my_territory_border_x:
+                    self.my_territory_border_x = entity.position.x
+                if entity.position.y > self.my_territory_border_y:
+                    self.my_territory_border_y = entity.position.y
+
             if entity.player_id != my_id:
                 continue
-            
-            # Get the properties of the current entity
-            properties = player_view.entity_properties[entity.entity_type]
 
-            # Initialize a move and build action
-            move_action = None
-            build_action = None
+            if entity.entity_type == EntityType.BUILDER_UNIT:
+                self.builder_count += 1
 
-            # If the entity can move, move it to the opposite corner of the map. Find closest position and break through set as true
-            if properties.can_move:
-                move_action = MoveAction(Vec2Int(player_view.map_size - 1, player_view.map_size - 1),True,True)
+            if player_view.entity_properties[entity.entity_type].population_use:
+                self.current_population = self.current_population + player_view.entity_properties[entity.entity_type].population_use
 
-            # If the entity can't move, but can build, then execute
-            elif properties.build is not None:
+            if player_view.entity_properties[entity.entity_type].population_provide:
+                self.max_population = self.max_population + player_view.entity_properties[entity.entity_type].population_provide
 
-                # Gets the type of unit that the entity can make
-                entity_type = properties.build.options[0]
+        #if (player_view.current_tick % 10 == 0):
+        #    print(self.my_territory_border_x, self.my_territory_border_y)
 
-                current_units = 0
-                
-                # Loop through all of the other entities in view
-                for other_entity in player_view.entities:
-                    # If they are owned by me, and are of the same type as the type that this entity can make, add one to current_units
-                    if my_id == other_entity.player_id and other_entity.entity_type == entity_type:
-                        current_units += 1
+        # When we have less than 10 builders (early game):
+        #if (self.builder_count <= 14):
+        if True:
 
-                # Check whether adding another unit is possible with the population we can provide for
-                if (current_units + 1) * player_view.entity_properties[entity_type].population_use <= properties.population_provide:
+            # Loop through the entities
+            for entity in player_view.entities:
 
-                    # Set a build action to make a unit, putting in desired position of new entity
-                    build_action = BuildAction(entity_type, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
-            
-            # Sets the EntityAction for the entity. Prioritized as attack, build, repair, and move
-            # For AttackAction, 
-            # AttackAction(target entity's id or None, If specified, configures auto attacking)
-            result.entity_actions[entity.id] = EntityAction(  
-                move_action,
-                build_action,
+                # Ignore entities that aren't mine
+                if (entity.player_id != my_id):
+                    continue
 
-                # AutoAttack(maximum distance to pathfind, valid_targets)
-                # Sets attack action as anything but resource for non-builders, and as resource for builders
-                # If valid_targets is empty, then all types but resource are considered
-                AttackAction(None, AutoAttack(properties.sight_range, [
-                             EntityType.RESOURCE] if entity.entity_type == EntityType.BUILDER_UNIT else [])),
-                None
-            )
+                # If the entity does not have an entry in busy (it is newly created), set it to zero
+                if entity.id not in self.busy.keys():
+                    self.busy[entity.id] = 0
+
+                move_action, build_action, attack_action, repair_action = None, None, None, None
+
+                # Get properties of the current entity
+                properties = player_view.entity_properties[entity.entity_type]
+                    
+                # If we have a population that is close to the maximum, assign a builder to make a house
+                # If it’s a builder, find nearest resource and mine
+                if entity.entity_type == EntityType.BUILDER_UNIT:
+
+                    if self.busy[entity.id] == 0:
+
+                        # Check if there are any buildings that are not at max health and are not being repaired already
+                        buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
+
+                        if ((self.making_house == 0) and (self.current_population > (self.max_population-3))):
+                    
+                            print('attempting to build house')
+                            #build_position = Vec2Int(player_view.map_size-77, player_view.map_size-77)
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            #build_position = self._find_place_for_house(player_view,debug_interface)
+                            build_action = BuildAction(EntityType.HOUSE, build_position)
+                            #move_action = MoveAction(Vec2Int(player_view.map_size-77, player_view.map_size-77), True, True)
+                            #build_action = BuildAction(EntityType.HOUSE, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+                            self.making_house = 5
+                            self.busy[entity.id] = 10
+                        
+                        # Check if there are any buildings that are not at max health and are right next to the entity
+                        # If the entity has just built something, it should repair it right after building it, since it will be nearby
+                        elif self._nearby_building(entity, buildings_to_repair) and self.busy[entity.id] == 0:
+                            print('need to repair!')
+                            building_to_repair = self._nearby_building(entity, buildings_to_repair)
+                            repair_action = RepairAction(building_to_repair.id)
+                            self.repairing[building_to_repair.id] += 1
+                            self.busy[entity.id] = 100
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+                        else:
+                            # Tell the builder to move to the opposite side of the map, but with autoattack (essentially tells them to mine nearby resources)
+                            move_action = MoveAction(Vec2Int(player_view.map_size - 1, player_view.map_size - 1),True,True)
+                            attack_action = AttackAction(None, AutoAttack(properties.sight_range, [EntityType.RESOURCE]))
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+                    else:
+                        self.busy[entity.id] -= 1
+
+
+                # If it's a builderBase, construct a builder every possible chance
+                elif entity.entity_type == EntityType.BUILDER_BASE:
+
+                    # Check if we can make a builder
+                    if ((self.current_population + 1 <= self.max_population)):
+                        
+                        # Tell the builderbase to make a builder
+                        build_action = BuildAction(EntityType.BUILDER_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
+                        result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+                # If it is a non-builder unit, then move to the edge of the base and autoattack []
+                elif (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT):
+                    
+                    if self.busy[entity.id] == 0:
+                        move_position = random.choice([Vec2Int(player_view.map_size - 60, player_view.map_size - 60), Vec2Int(player_view.map_size - 70, player_view.map_size - 60), Vec2Int(player_view.map_size - 60, player_view.map_size - 70)])
+                        move_action = MoveAction(move_position, True, True)
+                        attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
+
+                        
+                        nearby_enemies = self._enemies_nearby(player_view, debug_interface)
+                        if nearby_enemies:
+                            print('nearby enemies!')
+                            enemy_to_attack = random.choice(nearby_enemies)
+                            attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
+                        
+                        result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                        self.busy[entity.id] = 20
+                    
+                    else:
+                        self.busy[entity.id] -= 1
+
+            return result
+
+
+        # When we have more than 10 builders (post-early game), but before 50 units:
+        elif (self.builder_count > 14 and self.unit_count < 50):
+            # Check whether we need to repair any buildings
+            # Loop through the entities
+                # If I don't own the entity, then check if it is near my base. If so, attack it
+                # If we have a population that is close to the maximum, assign a builder to make a house
+                # If it’s a builder, find nearest resource and mine
+                # If it's a builderBase, make a builder every 5 ticks
+                # If it's a meleeBase or rangedBased, make a melee unit every 3 ticks
+                # If it is a non-builder unit, then move to the edge of the base and autoattack []
+                # Send occasional troops?
+            print("hi")
+
+        elif (self.unit_count >= 50):
+            # When we had more than 50 units:
+            # Check whether we need to repair any buildings
+            # Loop through the entities 
+                # If I don't own the entity, check if it is near my base. If so, attack it
+                # If we have a population that is close to the maximum, assign a builder to make a house
+                # If it’s a builder, find nearest resource and mine
+                # If it's a builderBase, make a builder every 5 ticks
+                # If it's a meleeBase or rangedBased, make a melee unit every 3 ticks
+            # Check how many buildings each player owns, and send troops in proportion to those numbers
+            print("hi2")
+
+
+
         return result
 
+    def _nearby_building(self, builder, buildings):
+        for building in buildings:
+            if ((abs(building.position.x - builder.position.x) < 2) and (abs(building.position.y - builder.position.y) < 2)):
+                return building
+        return None
+
+    def _enemies_near_initial_base(self, player_view, debug_interface):
+
+        enemies = []
+        for entity in player_view.entities:
+
+            # Ignore my units and resources
+            if ((entity.player_id == player_view.my_id) or (entity.entity_type == EntityType.RESOURCE)):
+                continue
+            
+            # Check if they are near my inital base position
+            if ((entity.position.x < (player_view.map_size - 55)) and (entity.position.y < (player_view.map_size - 55))):
+                enemies.append(entity)
+
+        return enemies
+
+    def _enemies_nearby(self, player_view, debug_interface):
+
+        enemies = []
+        for entity in player_view.entities:
+
+            # Ignore my units and resources
+            if ((entity.player_id == player_view.my_id) or (entity.entity_type == EntityType.RESOURCE)):
+                continue
+            
+            # Check if they are near any of my units
+            if ((entity.position.x < self.my_territory_border_x+7) and (entity.position.y < self.my_territory_border_y+7)):
+                enemies.append(entity)
+
+        return enemies
+
+
+    def _buildings_to_repair(self, player_view, debug_interface):
+
+        buildings_to_repair = []
+        for entity in player_view.entities:
+            if (entity.player_id != player_view.my_id):
+                continue
+
+            if (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT or entity.entity_type == EntityType.BUILDER_UNIT):
+                continue
+
+            if entity.id not in self.repairing.keys():
+                self.repairing[entity.id] = 0
+
+            #if (self._is_building(entity, player_view, debug_interface) and entity.health == player_view.entity_properties[entity.entity_type].max_health):
+            if (entity.entity_type == EntityType.HOUSE and entity.health == player_view.entity_properties[entity.entity_type].max_health):
+                self.repairing[entity.id] = 0
+
+            elif ((entity.health != player_view.entity_properties[entity.entity_type].max_health) and (self.repairing[entity.id] < 100)):
+            #if ((entity.health != player_view.entity_properties[entity.entity_type].max_health)):
+                buildings_to_repair.append(entity)
+
+        return buildings_to_repair
+
+    def _is_building(self, entity, player_view, debug_interface):
+        if (entity.entity_type == EntityType.MELEE_BASE or entity.entity_type == EntityType.RANGED_BASE or entity.entity_type == EntityType.WALL or entity.entity_type == EntityType.BUILDER_BASE or entity.entity_type == EntityType.TURRET or entity.entity_type == EntityType.HOUSE):
+            return True
+        else:
+            return False
+
+    def _find_place_for_house(self, player_view, debug_interface):
+        #for ()
+        #    for ()
+        
+        return Vec2Int(player_view.map_size-77, player_view.map_size-77)
+
+
+
     def debug_update(self, player_view, debug_interface):
+        #vertex = ColoredVertex(Vec2Float(15, 15), 0, Color(225, 0, 0, 1))
+
+        #debug_interface.send(DebugCommand.Add(DebugData.PlacedText(ColoredVertex(None, 3, Color(5, 5, 5, 1)), "f", 0.5, 13)))
+        #debug_interface.send(DebugCommand.Add(DebugData.Log("hello")))
+        
         debug_interface.send(DebugCommand.Clear())
         debug_interface.get_state()
