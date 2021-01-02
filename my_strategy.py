@@ -60,7 +60,7 @@ class MyStrategy:
         for entity in player_view.entities:
             self.entity_positions[entity.id] = Vec2Int(entity.position.x, entity.position.y)
 
-            if (entity.player_id == my_id):
+            if (entity.player_id == my_id and entity.entity_type != EntityType.MELEE_UNIT and entity.entity_type != EntityType.RANGED_UNIT):
                 #print(entity.position.x, entity.position.y)
                 if entity.position.x > self.my_territory_border_x:
                     self.my_territory_border_x = entity.position.x
@@ -83,11 +83,9 @@ class MyStrategy:
         #    print(self.my_territory_border_x, self.my_territory_border_y)
 
 
-
-
         # EARLY GAME: Make builders
-        #if (self.builder_count <= 12):
-        if True:
+        if (self.builder_count <= 12):
+        #if True:
 
             # Loop through the entities
             for entity in player_view.entities:
@@ -176,27 +174,29 @@ class MyStrategy:
                         self.busy[entity.id] -= 1
 
                 # MELEE and RANGED BASE: Build a unit every 5 ticks
-                elif (entity.entity_type == EntityType.RANGED_BASE or entity.entity_type == EntityType.MELEE_BASE):
+                elif (entity.entity_type == EntityType.RANGED_BASE):
                     # Do every 5 ticks
-                    if (player_view.current_tick % 10 and player_view.players[my_id].resource > 10):
+                    if (player_view.current_tick % 20 and player_view.players[my_id].resource > 30):
                         # Check if we can make a unit
                         if ((self.current_population + 1 <= self.max_population)):
-                            unit_type = None
-                            if entity.entity_type == EntityType.RANGED_BASE:
-                                unit_type = EntityType.RANGED_UNIT
-                            else:
-                                unit_type = EntityType.MELEE_UNIT
-
                             # Tell the base to make a unit
-                            build_action = BuildAction(unit_type, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
+                            build_action = BuildAction(EntityType.RANGED_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+
+                elif (entity.entity_type == EntityType.MELEE_BASE):
+                    # Do every 5 ticks
+                    if (player_view.current_tick % 20 and player_view.players[my_id].resource > 20):
+                        # Check if we can make a unit
+                        if ((self.current_population + 1 <= self.max_population)):
+                            # Tell the base to make a unit
+                            build_action = BuildAction(EntityType.MELEE_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)     
             
             return result
 
-        '''
+        
         # MID GAME: Focus on building up army
         if (self.builder_count > 12):
-            print('second')
 
             # Loop through the entities
             for entity in player_view.entities:
@@ -222,14 +222,14 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view, debug_interface)
 
-                        if ((self.making_house == 0) and (self.current_population > (self.max_population-7)) and (player_view.players[my_id].resource > 50)):
+                        if ((self.making_house == 0) and (self.current_population > (self.max_population-7))):
                     
                             print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
                             build_action = BuildAction(EntityType.HOUSE, build_position)
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
 
-                            self.making_house = 1
+                            self.making_house = 5
                             self.busy[entity.id] = 10
                         
                         # Check if there are any buildings that are not at max health and are right next to the entity
@@ -251,7 +251,7 @@ class MyStrategy:
                         self.busy[entity.id] -= 1
 
 
-                # BUILDER BASE: Make a unit every possible chance
+                # BUILDER BASE: Make a unit every 10 ticks
                 elif entity.entity_type == EntityType.BUILDER_BASE:
                     if (player_view.current_tick % 10 == 0):
                         # Check if we can make a builder
@@ -267,7 +267,7 @@ class MyStrategy:
                     
                     if self.busy[entity.id] == 0:
                         move_position = random.choice([Vec2Int(self.my_territory_border_x+2, self.my_territory_border_y+2), Vec2Int(self.my_territory_border_x//2, self.my_territory_border_y+2), Vec2Int(self.my_territory_border_x+2, self.my_territory_border_y//2)])
-                        move_action = MoveAction(move_position, True, True)
+                        move_action = MoveAction(move_position, True, False)
                         attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
 
                         
@@ -304,7 +304,7 @@ class MyStrategy:
                             build_action = BuildAction(EntityType.MELEE_UNIT, Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1))
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)            
 
-            return result'''
+            return result
 
 
 
