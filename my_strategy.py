@@ -23,6 +23,7 @@ class MyStrategy:
         self.number_of_enemy_players = 0
         self.other_player_ids = []
         self.remaining_enemies = []
+        self.just_moved_to_make_house = {}
 
 
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
@@ -99,7 +100,7 @@ class MyStrategy:
             if player_view.entity_properties[entity.entity_type].population_use:
                 self.current_population = self.current_population + player_view.entity_properties[entity.entity_type].population_use
 
-            if player_view.entity_properties[entity.entity_type].population_provide:
+            if player_view.entity_properties[entity.entity_type].population_provide and entity.health == player_view.entity_properties[entity.entity_type].max_health:
                 self.max_population = self.max_population + player_view.entity_properties[entity.entity_type].population_provide
 
         # Set the game stage: EARLY, MID, LATE
@@ -110,7 +111,6 @@ class MyStrategy:
         elif (self.builder_count > 12 and self.unit_count >= 60):
             self.game_stage = 2
 
-        print(self.players_alive)
 
 
 
@@ -135,13 +135,15 @@ class MyStrategy:
                     
                 # BUILDER UNITS: Build and repair house if necessary, otherwise mine nearby resources
                 if entity.entity_type == EntityType.BUILDER_UNIT:
+                    
+                    if entity.id not in self.just_moved_to_make_house.keys():
+                        self.just_moved_to_make_house[entity.id] = 0
 
                     if self.busy[entity.id] == 0:
 
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view)
                         
-                        #if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                         if (self._make_house(player_view, entity)):
                             print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
@@ -236,7 +238,6 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view)
 
-                        #if ((self.making_house == 0) and (self.current_population > (self.max_population-10)) and (player_view.players[my_id-1].resource > 50)):
                         if (self._make_house(player_view, entity)):
                             print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
@@ -336,7 +337,7 @@ class MyStrategy:
                         make_turret = self._make_turret(player_view, entity)
                         make_house = self._make_house(player_view, entity)
                         if (make_house or make_turret):
-                            if (entity.position.x < 30 and entity.position.y < 30):
+                            if (entity.position.x < 35 and entity.position.y < 35):
                                 if (make_house):
                                     print('attempting to build house')
                                     build_action = BuildAction(EntityType.HOUSE, build_position)
