@@ -23,7 +23,7 @@ class MyStrategy:
         self.number_of_enemy_players = 0
         self.other_player_ids = []
         self.remaining_enemies = []
-        self.just_moved_to_make_house = {}
+        #self.building_cap = 
 
 
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
@@ -112,7 +112,7 @@ class MyStrategy:
             self.game_stage = 2
 
 
-
+        print(self.builder_count)
 
         # EARLY GAME: Make builders
         if (self.game_stage == 0):
@@ -135,9 +135,6 @@ class MyStrategy:
                     
                 # BUILDER UNITS: Build and repair house if necessary, otherwise mine nearby resources
                 if entity.entity_type == EntityType.BUILDER_UNIT:
-                    
-                    if entity.id not in self.just_moved_to_make_house.keys():
-                        self.just_moved_to_make_house[entity.id] = 0
 
                     if self.busy[entity.id] == 0:
 
@@ -440,7 +437,9 @@ class MyStrategy:
         cost_to_build = player_view.entity_properties[unit_type].initial_cost
         move_action, build_action, attack_action, repair_action = None, None, None, None
         properties = player_view.entity_properties[base.entity_type]
-        if (player_view.current_tick % freq == 0 and player_view.players[player_view.my_id-1].resource > cost_to_build and self.current_population + 1 <= self.max_population):
+        if (unit_type == EntityType.BUILDER_UNIT and (self.builder_count > (self.max_population//2)) and self.game_stage == 2):
+            pass
+        elif (player_view.current_tick % freq == 0 and player_view.players[player_view.my_id-1].resource > cost_to_build and self.current_population + 1 <= self.max_population):
             build_action = BuildAction(unit_type, Vec2Int(base.position.x + properties.size, base.position.y + properties.size - 1))
             result.entity_actions[base.id] = EntityAction(move_action, build_action, attack_action, repair_action)
 
