@@ -57,13 +57,6 @@ class MyStrategy:
 
             self.map_center = Vec2Int(player_view.map_size / 2, player_view.map_size / 2)
 
-            print(self.map_center)
-            print(self.enemy_base_positions)
-            print(self.my_base_position)
-            print(self.other_player_ids)
-            print(my_id)
-            print(self.number_of_enemy_players)
-
         # EVERY ROUND, BEFORE ASSIGNING ACTIONS: Get the current populations and positions of units and boundary of my occupied territory
         self.builder_count = 0
         self.current_population = 0
@@ -112,7 +105,7 @@ class MyStrategy:
             self.game_stage = 2
 
 
-        print(self.builder_count)
+
 
         # EARLY GAME: Make builders
         if (self.game_stage == 0):
@@ -142,7 +135,6 @@ class MyStrategy:
                         buildings_to_repair = self._buildings_to_repair(player_view)
                         
                         if (self._make_house(player_view, entity)):
-                            print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
                             build_action = BuildAction(EntityType.HOUSE, build_position)
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
@@ -153,7 +145,6 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are right next to the entity
                         # If the entity has just built something, it should repair it right after building it, since it will be nearby
                         elif self._nearby_building(entity, buildings_to_repair) and self.busy[entity.id] == 0:
-                            print('need to repair!')
                             building_to_repair = self._nearby_building(entity, buildings_to_repair)
                             repair_action = RepairAction(building_to_repair.id)
                             self.busy[entity.id] = 45
@@ -178,7 +169,6 @@ class MyStrategy:
                         
                         nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
-                            print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
                             move_action = MoveAction(Vec2Int(enemy_to_attack.position.x, enemy_to_attack.position.y), True, True)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
@@ -236,7 +226,6 @@ class MyStrategy:
                         buildings_to_repair = self._buildings_to_repair(player_view)
 
                         if (self._make_house(player_view, entity)):
-                            print('attempting to build house')
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
                             build_action = BuildAction(EntityType.HOUSE, build_position)
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
@@ -247,7 +236,6 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are right next to the entity
                         # If the entity has just built something, it should repair it right after building it, since it will be nearby
                         elif self._nearby_building(entity, buildings_to_repair) and self.busy[entity.id] == 0:
-                            print('need to repair!')
                             building_to_repair = self._nearby_building(entity, buildings_to_repair)
                             repair_action = RepairAction(building_to_repair.id)
                             self.busy[entity.id] = 45
@@ -272,7 +260,6 @@ class MyStrategy:
                         
                         nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
-                            print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
                             move_action = MoveAction(Vec2Int(enemy_to_attack.position.x, enemy_to_attack.position.y), True, True)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
@@ -336,11 +323,9 @@ class MyStrategy:
                         if (make_house or make_turret):
                             if (entity.position.x < 35 and entity.position.y < 35):
                                 if (make_house):
-                                    print('attempting to build house')
                                     build_action = BuildAction(EntityType.HOUSE, build_position)
                             else:
                                 if (make_turret):
-                                    print('attempting to build turret')
                                     build_action = BuildAction(EntityType.TURRET, build_position)
 
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
@@ -351,7 +336,6 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are right next to the entity
                         # If the entity has just built something, it should repair it right after building it, since it will be nearby
                         elif self._nearby_building(entity, buildings_to_repair) and self.busy[entity.id] == 0:
-                            print('need to repair!')
                             building_to_repair = self._nearby_building(entity, buildings_to_repair)
                             repair_action = RepairAction(building_to_repair.id)
                             self.busy[entity.id] = 45
@@ -381,14 +365,12 @@ class MyStrategy:
                             attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
 
                         elif self.remaining_enemies:
-                            print('get remaining enemies')
                             enemy_to_attack = random.choice(self.remaining_enemies)
                             move_action = MoveAction(Vec2Int(enemy_to_attack.position.x, enemy_to_attack.position.y), True, True)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
 
                         nearby_enemies = self._enemies_nearby(player_view)
                         if nearby_enemies:
-                            print('nearby enemies!')
                             enemy_to_attack = random.choice(nearby_enemies)
                             move_action = MoveAction(Vec2Int(enemy_to_attack.position.x, enemy_to_attack.position.y), True, True)
                             attack_action = AttackAction(enemy_to_attack.id, AutoAttack(properties.sight_range, []))
