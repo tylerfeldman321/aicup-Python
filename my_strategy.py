@@ -16,14 +16,18 @@ class MyStrategy:
         self.game_stage = 0
         self.my_territory_border_x = 0
         self.my_territory_border_y = 0
-        self.enemy_base_positions = [None]*5
         self.my_base_position = None
         self.map_center = None
-        self.players_alive = [1]*5
+        self.melee_base =  False
+        self.ranged_base = False
+        self.fog_of_war = False
         self.number_of_enemy_players = 0
         self.other_player_ids = []
-        self.remaining_enemies = []
 
+        # Rely on having fog of war off
+        self.enemy_base_positions = [None]*5
+        self.remaining_enemies = []
+        self.players_alive = [1]*5
 
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
     def get_action(self, player_view, debug_interface):
@@ -38,12 +42,13 @@ class MyStrategy:
 
         # AT THE VERY BEGINNING OF THE GAME: Get position of the enemy bases and my base. Initialize reparing
         if player_view.current_tick == 0:
+            if player_view.fog_of_war:
+                self.fog_of_war = True  
+
             for entity in player_view.entities:
-                if entity.player_id not in self.other_player_ids and entity.entity_type != EntityType.RESOURCE and entity.player_id != my_id:
-                    self.other_player_ids.append(entity.player_id)
                 self.busy[entity.id] = 0
 
-                if (entity.entity_type == EntityType.TURRET and entity.player_id != my_id):
+                if (entity.entity_type == EntityType.TURRET and entity.player_id != my_id and not self.fog_of_war):
                     self.enemy_base_positions[entity.player_id] = entity.position
 
                 elif (entity.entity_type == EntityType.TURRET and entity.player_id == my_id):
@@ -51,10 +56,32 @@ class MyStrategy:
 
                 if (entity.player_id == player_view.my_id and self._is_building(entity, player_view)):
                     self.repairing[entity.id] = 0
+                
+                if (entity.entity_type == EntityType.MELEE_BASE and entity.player_id == my_id):
+                    self.melee_base = True
+                if (entity.entity_type == EntityType.RANGED_BASE and entity.player_id == my_id):
+                    self.ranged_base = True
 
-            self.number_of_enemy_players = len(self.other_player_ids)
-
+            for player in player_view.players:
+                if player.id != my_id:
+                    self.other_player_ids.append(player.id)
+            self.number_of_enemy_players = len(player_view.players)-1
             self.map_center = Vec2Int(player_view.map_size / 2, player_view.map_size / 2)
+
+            if self.fog_of_war:
+                if self.number_of_enemy_players == 1:
+                    self.enemy_base_positions[self.other_player_ids[0]] = Vec2Int(63, 63)
+                else:
+                    b_positions = [Vec2Int(63,63), Vec2Int(15,63), Vec2Int(63,15)]
+                    j = 0
+                    for i in range(len(self.enemy_base_positions)):
+                        if i == my_id or i == 0:
+                            pass
+                        else:
+                            self.enemy_base_positions[i] = b_positions[j]
+                            j += 1
+
+            print(self.enemy_base_positions, self.other_player_ids, self.players_alive)
 
         # EVERY ROUND, BEFORE ASSIGNING ACTIONS: Get the current populations and positions of units and boundary of my occupied territory
         self.builder_count = 0
@@ -65,10 +92,14 @@ class MyStrategy:
         for i in range(len(self.players_alive)): # Assume the other players are dead, correct if they aren't
             self.players_alive[i] = 0
 
+        if self.fog_of_war:
+            for i in self.other_player_ids:
+                self.players_alive[i] = 1
+
         for entity in player_view.entities:
             self.entity_positions[entity.id] = Vec2Int(entity.position.x, entity.position.y)
             
-            if entity.player_id != my_id:
+            if entity.player_id != my_id and not self.fog_of_war:
                 if (entity.entity_type != EntityType.RESOURCE):
                     for i in self.other_player_ids:
                         if (entity.position.x > self.enemy_base_positions[i].x-10 and entity.position.x < self.enemy_base_positions[i].x+10 and entity.position.y > self.enemy_base_positions[i].y-10 and entity.position.y < self.enemy_base_positions[i].y+10):
@@ -105,7 +136,6 @@ class MyStrategy:
 
 
 
-
         # EARLY GAME: Make builders
         if (self.game_stage == 0):
 
@@ -133,7 +163,23 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view)
                         
-                        if (self._make_house(player_view, entity)):
+                        make_base = self._make_base(player_view, entity)
+
+                        if (make_base and not self.ranged_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.RANGED_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.ranged_base = True
+
+                        elif (make_base and not self.melee_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.MELEE_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.melee_base = True
+
+                        elif (self._make_house(player_view, entity)):
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
                             build_action = BuildAction(EntityType.HOUSE, build_position)
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
@@ -224,7 +270,23 @@ class MyStrategy:
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view)
 
-                        if (self._make_house(player_view, entity)):
+                        make_base = self._make_base(player_view, entity)
+
+                        if (make_base and not self.ranged_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.RANGED_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.ranged_base = True
+
+                        elif (make_base and not self.melee_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.MELEE_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.melee_base = True
+
+                        elif (self._make_house(player_view, entity)):
                             build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
                             build_action = BuildAction(EntityType.HOUSE, build_position)
                             result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
@@ -314,12 +376,26 @@ class MyStrategy:
 
                         # Check if there are any buildings that are not at max health and are not being repaired already
                         buildings_to_repair = self._buildings_to_repair(player_view)
-
                         build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
-                        
                         make_turret = self._make_turret(player_view, entity)
                         make_house = self._make_house(player_view, entity)
-                        if (make_house or make_turret):
+                        make_base = self._make_base(player_view, entity)
+
+                        if (make_base and not self.ranged_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.RANGED_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.ranged_base = True
+
+                        elif (make_base and not self.melee_base):
+                            build_position = Vec2Int(entity.position.x + properties.size, entity.position.y + properties.size - 1)
+                            build_action = BuildAction(EntityType.MELEE_BASE, build_position)
+                            result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
+                            self.busy[entity.id] = 5
+                            self.melee_base = True
+
+                        elif (make_house or make_turret):
                             if (entity.position.x < 35 and entity.position.y < 35):
                                 if (make_house):
                                     build_action = BuildAction(EntityType.HOUSE, build_position)
@@ -376,7 +452,7 @@ class MyStrategy:
                         
                         result.entity_actions[entity.id] = EntityAction(move_action, build_action, attack_action, repair_action)
                         self.busy[entity.id] = 80
-                    
+
                     else:
                         self.busy[entity.id] -= 1
 
@@ -411,6 +487,14 @@ class MyStrategy:
             return False
         for entity in player_view.entities:
             if (entity.position.x > builder.position.x and entity.position.x < builder.position.x+4 and entity.position.y >= builder.position.y and entity.position.y < builder.position.y+3):
+                return False
+        return True
+
+    def _make_base(self, player_view, builder):
+        if player_view.players[player_view.my_id-1].resource < 500:
+            return False
+        for entity in player_view.entities:
+            if (entity.position.x > builder.position.x and entity.position.x < builder.position.x+6 and entity.position.y >= builder.position.y and entity.position.y < builder.position.y+5):
                 return False
         return True
 
