@@ -353,14 +353,14 @@ class MyStrategy:
                 elif (entity.entity_type == EntityType.MELEE_UNIT or entity.entity_type == EntityType.RANGED_UNIT):
                     
                     if self.busy[entity.id] == 0:
-                        attacking_positions = []
+                        bases_to_attack = []
                         for i in self.other_player_ids:
                             if (self.players_alive[i]):
-                                attacking_positions.append(self.enemy_base_positions[i])
+                                bases_to_attack.append(self.enemy_base_positions[i])
 
-                        if attacking_positions:
-                            move_position = random.choice(attacking_positions)
-                            move_action = MoveAction(move_position, True, False)
+                        if bases_to_attack:
+                            move_position = random.choice(bases_to_attack)
+                            move_action = MoveAction(move_position, True, True)
                             attack_action = AttackAction(None, AutoAttack(properties.sight_range, []))
 
                         elif self.remaining_enemies:
