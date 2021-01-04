@@ -23,7 +23,6 @@ class MyStrategy:
         self.number_of_enemy_players = 0
         self.other_player_ids = []
         self.remaining_enemies = []
-        #self.building_cap = 
 
 
     # Gathering resources, buys units separately for each type and sends them to the opposite map corner with auto attack
@@ -478,7 +477,6 @@ class MyStrategy:
                 self.repairing[entity.id] = 0
 
             elif (entity.health != player_view.entity_properties[entity.entity_type].max_health):
-            #if ((entity.health != player_view.entity_properties[entity.entity_type].max_health)):
                 buildings_to_repair.append(entity)
 
         return buildings_to_repair
@@ -490,10 +488,5 @@ class MyStrategy:
             return False
 
     def debug_update(self, player_view, debug_interface):
-        #vertex = ColoredVertex(Vec2Float(15, 15), 0, Color(225, 0, 0, 1))
-
-        #debug_interface.send(DebugCommand.Add(DebugData.PlacedText(ColoredVertex(None, 3, Color(5, 5, 5, 1)), "f", 0.5, 13)))
-        #debug_interface.send(DebugCommand.Add(DebugData.Log("hello")))
-        
         debug_interface.send(DebugCommand.Clear())
         debug_interface.get_state()
